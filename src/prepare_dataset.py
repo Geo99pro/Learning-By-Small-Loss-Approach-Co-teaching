@@ -56,8 +56,6 @@ class PrepareDataset(Dataset):
         self.class_cols_train = self.df_train_clean.columns[2:].tolist()
         assert self.class_cols_train == self.df_train_noise.columns[2:].tolist(), "Class columns in clean and noisy training CSVs do not match."
         self.class_cols_test = self.df_test.columns[2:].tolist()
-
-        os.makedirs(self.output_dir, exist_ok=True)
         self.transforms = None
 
     def _path_fixed(self, df: pd.DataFrame) -> pd.DataFrame:
