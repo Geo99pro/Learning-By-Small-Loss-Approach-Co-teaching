@@ -19,14 +19,14 @@ def _resolve_weights(model_name: str, model_weight: str):
 
 
 class GetModel(nn.Module):
-    def __init__(self, path_to_model_weight: str = None,
+    def __init__(self, path_to_save_model_weight: str,
                 model_name: str = 'vgg16',
                 model_weight: str = 'IMAGENET1K_V1',
                 display_model_summary: bool = False
                 ) -> nn.Module:
         super().__init__()
 
-        self.path_to_model_weight=path_to_model_weight
+        self.path_to_save_model_weight=path_to_save_model_weight
         self.model_name=model_name
         self.model_weight=model_weight
         self.display_model_summary=display_model_summary
@@ -38,10 +38,10 @@ class GetModel(nn.Module):
             summary(self.backbone, input_size=(1, 3, 224, 224))
 
     def _process_folder(self):
-        if self.path_to_model_weight is None:
-            folder_path = os.path.join(os.getcwd(), "model_weights")
+        if self.path_to_save_model_weight is None:
+            folder_path = os.path.join(os.getcwd(), self.model_name)
         else:
-            folder_path = os.path.join(self.path_to_model_weight, self.model_name)
+            folder_path = os.path.join(self.path_to_save_model_weight, self.model_name)
         os.makedirs(folder_path, exist_ok=True)
         os.environ["TORCH_HOME"] = folder_path
 
