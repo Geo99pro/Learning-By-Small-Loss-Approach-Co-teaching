@@ -20,13 +20,13 @@ class CustomHead(nn.Module):
         return proba, logits
 
 class CoTeachingNet(GetModel):
-    def __init__(self, path_to_model_weight: str = None,
+    def __init__(self, path_to_save_model_weight,
                  model_name: str = 'vgg16',
                  model_weight: str = 'IMAGENET1K_V1',
                  class_number: int = 14,
                  how_many_layers_to_unfreeze: int = 4,
                  display_model_summary: bool = False) -> nn.Module:
-        super().__init__(path_to_model_weight, model_name, model_weight, display_model_summary)
+        super().__init__(path_to_save_model_weight, model_name, model_weight, display_model_summary)
 
         self.how_many_layers_to_unfreeze = how_many_layers_to_unfreeze
         self.backbone, feature_dim = self.get_model()
