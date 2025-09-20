@@ -26,7 +26,7 @@ def evaluate_model(data_loader,
             probs = (probs_A + probs_B) / 2.0
             
         preds = (probs > threshold).float()
-        f1_micro, f1_macro, subset_acc, sample_acc = multilabel_metrics_from_preds(preds, label, threshold)
+        f1_micro, f1_macro, subset_acc, sample_acc = multilabel_metrics_from_preds(preds, label)
         
         total_f1_micro += f1_micro
         total_f1_macro += f1_macro
