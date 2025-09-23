@@ -8,37 +8,47 @@ OUTPUT_DIR = os.path.join(parent_dir, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 import torch
-import sklearn
 import argparse
-import numpy as np
-import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
-from criterion import CustomLosses
+from metric import evaluate_model
 from torch.utils.data import DataLoader
 from co_teaching_net import CoTeachingNet
-from prepare_dataset import PrepareDataset
+from prepare_dataset import StandardParams, PrepareTrainDataset, PrepareTestDataset
 
 def main(args):
-    preparator = PrepareDataset(train_clean_csv_path=args.train_clean_csv_path,
-                        train_csv_noise_path=args.train_csv_noise_path,
-                        test_csv_path=args.test_csv_path,
-                        augment=True,
-                        output_dir=args.output_dir,
-                        img_size=args.img_size,
-                        is_change_path=args.is_change_path,
-                        batch_size=args.batch_size,
-                        image_dir=args.image_dir,
-                        save_cls_distribution=args.save_cls_distribution,
-                        fix_paths_in_memory=False)
+    train_preparator = PrepareTrainDataset(train_clean_csv_path=args.train_clean_csv_path,
+                                           train_noise_csv_path=args.train_csv_noise_path,
+                                           augment=True,
+                                           is_change_path=args.is_change_path,
+                                           image_dir=args.image_dir,
+                                           output_dir=args.output_dir,
+                                           save_cls_distribution=args.save_cls_distribution,
+                                           fix_paths_in_memory=False)
     
-    train_dataset = preparator.trainer()
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    test_preparator = PrepareTestDataset(csv_path=args.test_csv_path,
+                                        is_change_path=args.is_change_path,
+                                        image_dir=args.image_dir,
+                                        output_dir=args.output_dir,
+                                        save_cls_distribution=args.save_cls_distribution,
+                                        fix_paths_in_memory=False)
+    
+    train_dataset = train_preparator.trainer()
+    #test_dataset = test_preparator.tester()
 
-    network_A = CoTeachingNet(model_name=args.model_name, class_number=train_dataset.nb_class,
-                              how_many_layers_to_unfreeze=4)
-    network_B = CoTeachingNet(model_name=args.model_name, class_number=train_dataset.nb_class,
-                              how_many_layers_to_unfreeze=4)
+    train_loader = DataLoader(train_dataset, batch_size=StandardParams.BATCH_SIZE.value, shuffle=True)
+    # test_loader = DataLoader(test_dataset, batch_size=StandardParams.BATCH_SIZE.value, shuffle=False)
+
+
+    network_A = CoTeachingNet(path_to_save_model_weight=args.output_dir, 
+                            model_name=args.model_name, 
+                            class_number=train_dataset.nb_class,
+                            how_many_layers_to_unfreeze=4)
+    
+    network_B = CoTeachingNet(path_to_save_model_weight=args.output_dir, 
+                            model_name=args.model_name, 
+                            class_number=train_dataset.nb_class,
+                            how_many_layers_to_unfreeze=4)
 
     print('Network A and B are ready for use.')
 
@@ -59,7 +69,7 @@ def main(args):
     
     def flip_hard_labels(labels, loss, R_T):
         """ This function flips the labels of the samples with the largest losses.
-        
+        # Small loss trick is used to select clean samples, so we flip the labels of the samples with the largest losses.
         Args:
             labels (torch.Tensor): Original labels of shape (B, C).
             loss (torch.Tensor): Loss values of shape (B, C).
@@ -102,21 +112,17 @@ def main(args):
     EPOCH_SWITCHER = 1
     print('🚔 Starting training...')
 
-    for epoch in tqdm(range(args.epochs), desc="Epochs"):
-        network_A.train()
-        network_B.train()
-
+    for epoch in range(args.epochs):
+        network_A.train(), network_B.train()
         R_T = min((epoch + 1) * args.noise_rate / Tk, args.noise_rate)
-        tqdm.write(f"📉 Current R_T: {R_T:.4f}")
         
-        epoch_loss_A = 0.0
-        epoch_loss_B = 0.0
+        epoch_loss_A, epoch_loss_B = 0.0, 0.0
         n_batches = 0
 
-        for i, (_, clean_lbl, noisy_img, noisy_lbl) in tqdm(enumerate(train_loader), total=n_batches, desc=f"Training Batches {n_batches}"):
-            noisy_img = noisy_img.to(device)
-            noisy_lbl = noisy_lbl.to(device)
-            clean_lbl = clean_lbl.to(device)
+        for i, (images, labels_noise, labels_clean) in enumerate(train_loader):
+            noisy_img = images.to(device)
+            noisy_lbl = labels_noise.to(device)
+            clean_lbl = labels_clean.to(device)
 
             _, logits_A = network_A(noisy_img)
             _, logits_B = network_B(noisy_img)
@@ -151,25 +157,32 @@ def main(args):
             epoch_loss_A += loss_A.item()
             epoch_loss_B += loss_B.item()
             n_batches += 1
+
         avg_loss_A = epoch_loss_A / n_batches
         avg_loss_B = epoch_loss_B / n_batches
         print(f"Epoch [{epoch+1}/{args.epochs}] | Current R_T: {R_T:.4f} | Mini Batch {i+1}/{len(train_loader)} | Loss A: {avg_loss_A:.4f} | Loss B: {avg_loss_B:.4f}")
+        
+        # Evaluate the model on the test set
+        test_dataset = test_preparator.tester()
+        test_loader = DataLoader(test_dataset, batch_size=StandardParams.BATCH_SIZE.value, shuffle=False)
+        metrics = evaluate_model(test_loader, network_A, network_B, threshold=0.5, device=device)
+        print(f"Evaluation Metrics after Epoch {epoch+1}: F1 Micro: {metrics['f1_micro']:.4f}, F1 Macro: {metrics['f1_macro']:.4f}, Subset Acc: {metrics['subset_acc']:.4f}, Sample Acc: {metrics['sample_acc']:.4f}")
     print('✅ Training completed.')
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Noisy Labels Training")
-    parser.add_argument('--train_clean_csv_path', default='D:/meus_codigos_doutourado/Doutourado_2025_2/clean_code/arvore_dataset_train_clean.csv', type=str, required=False, help='Path to the training CSV file with clean labels')
-    parser.add_argument('--train_csv_noise_path', default="D:/meus_codigos_doutourado/Doutourado_2025_2/clean_code/arvore_dataset_train_noise_25.csv", type=str, required=False, help='Path to the training CSV file with noisy labels')
-    parser.add_argument('--test_csv_path', default="D:/meus_codigos_doutourado/Doutourado_2025_2/clean_code/arvore_dataset_test_clean.csv", type=str, required=False, help='Path to the test CSV file')
+    parser.add_argument('--train_clean_csv_path', default='D:/meus_codigos_doutourado/Doutourado_2025_2/clean_code/Learning-By-Small-Loss-Approach-Co-teaching/dataset/arvore_dataset_train_clean.csv', type=str, required=False, help='Path to the training CSV file with clean labels')
+    parser.add_argument('--train_csv_noise_path', default="D:/meus_codigos_doutourado/Doutourado_2025_2/clean_code/Learning-By-Small-Loss-Approach-Co-teaching/dataset/arvore_dataset_train_noise_25.csv", type=str, required=False, help='Path to the training CSV file with noisy labels')
+    parser.add_argument('--test_csv_path', default="D:/meus_codigos_doutourado/Doutourado_2025_2/clean_code/Learning-By-Small-Loss-Approach-Co-teaching/dataset/arvore_dataset_test_clean.csv", type=str, required=False, help='Path to the test CSV file')
     parser.add_argument('--image_dir', default="D:/meus_codigos_doutourado/Doutourado_2025_2/s1/s1/200m", type=str, required=False, help='Path to the directory containing images')
     parser.add_argument('--output_dir', type=str, default=OUTPUT_DIR, help='Path to the output directory')
-    parser.add_argument('--img_size', type=int, nargs=2, default=(224, 224), help='Image size (height, width)')
+    #parser.add_argument('--img_size', type=int, nargs=2, default=(224, 224), help='Image size (height, width)')
     parser.add_argument('--is_change_path', action='store_true', help='Whether to change image paths in the CSV files. Useful when you have to match the current directory of the images with the annotations')
     parser.add_argument('--save_cls_distribution', default=False, action='store_true', help='Save class distribution histograms for datasets')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and evaluation')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training and evaluation')
     parser.add_argument('--epochs', type=int, default=30, help='Number of training epochs')
-    parser.add_argument('--model_name', type=str, default='resnet50', choices=['vgg16', 'resnet50'], help='Model architecture to use')
-    parser.add_argument('--learning_rate', '--lr', type=float, default=1e-4, help='Learning rate for the optimizer')
+    parser.add_argument('--model_name', type=str, default='vgg16', choices=['vgg16', 'resnet50'], help='Model architecture to use')
+    parser.add_argument('--learning_rate', '--lr', type=float, default=0.00025, help='Learning rate for the optimizer')
     parser.add_argument('--noise_rate', type=float, default=0.2, help='Estimated noise rate in the training data')
     args = parser.parse_args()
     main(args)
