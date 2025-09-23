@@ -41,6 +41,10 @@ def evaluate_model(data_loader,
     metrics = {
         "f1_micro": total_f1_micro / n_batches,
         "f1_macro": total_f1_macro / n_batches,
+        "precision_micro": total_precision_micro / n_batches,
+        "recall_micro": total_recall_micro / n_batches,
+        "precision_macro": total_precision_macro / n_batches,
+        "recall_macro": total_recall_macro / n_batches,
         "subset_acc": total_subset_acc / n_batches,
         "sample_acc": total_sample_acc / n_batches,
     }
