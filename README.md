@@ -1,2 +1,2 @@
-# Learning-By-Small-Loss-Approach-Co-teaching
-This repository is the official repository for the paper: Learning By Small Loss Approach Multi-label To Deal With Noisy Labels.
+# Multi-label noisy samples in underwater inspection from the oil and gas industry
+This repository is the official repository for the paper: Multi-label noisy samples in underwater inspection from the oil and gas industry (part 1 - UCMerced dataset)
