@@ -166,6 +166,9 @@ def main(args):
         test_dataset = test_preparator.tester()
         test_loader = DataLoader(test_dataset, batch_size=StandardParams.BATCH_SIZE.value, shuffle=False)
         metrics = evaluate_model(test_loader, network_A, network_B, threshold=0.5, device=device)
+        dico = {**metrics, "epoch": epoch + 1}
+        with open(os.path.join(args.output_dir, 'evaluation_log.txt'), 'a') as f:
+            f.write(str(dico) + '\n')
         print(f"Evaluation Metrics after Epoch {epoch+1}: F1 Micro: {metrics['f1_micro']:.4f}, F1 Macro: {metrics['f1_macro']:.4f}, Subset Acc: {metrics['subset_acc']:.4f}, Sample Acc: {metrics['sample_acc']:.4f}")
     print('✅ Training completed.')
     
